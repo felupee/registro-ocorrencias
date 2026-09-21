@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a1d37">
+<link rel="manifest" href="manifest.json">
+<title>Registro de Ocorrências</title>
+<style>
+:root{--navy:#0a1d37;--bg:#f4f6f9;--card:#fff;--text:#17202a;--muted:#6b7280;--border:#e5e7eb;--danger:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text)}
+header{background:var(--navy);color:white;padding:18px 16px 20px;position:sticky;top:0;z-index:10}
+header h1{font-size:21px;margin:0 0 4px}header p{margin:0;opacity:.78;font-size:13px}
+main{max-width:720px;margin:auto;padding:16px 14px 90px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px #00000008}
+.row{display:flex;gap:10px;align-items:center}.between{justify-content:space-between}
+h2{font-size:18px;margin:4px 0 14px}.muted{color:var(--muted);font-size:13px}
+button,input,select,textarea{font:inherit}button{border:0;border-radius:11px;padding:11px 14px;cursor:pointer}
+.primary{background:var(--navy);color:white}.secondary{background:#edf1f5;color:var(--navy)}.danger{background:#fee4e2;color:var(--danger)}
+input,select,textarea{width:100%;border:1px solid #d6dae1;border-radius:11px;padding:11px;background:white;margin-top:6px}
+textarea{min-height:90px;resize:vertical}.field{margin:11px 0}.field label{font-size:13px;font-weight:650}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.list{display:flex;flex-direction:column;gap:9px}
+.item{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:13px;padding:13px;background:white}
+.item-main{min-width:0}.item-title{font-weight:650}.item-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.iconbtn{padding:7px 9px;background:#f3f4f6}.empty{text-align:center;color:var(--muted);padding:25px 10px}
+.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:13px}.tab{white-space:nowrap}.tab.active{background:var(--navy);color:white}
+.hidden{display:none!important}.pill{display:inline-block;background:#eef2f7;border-radius:99px;padding:4px 8px;font-size:11px;color:#394b60}
+.occ{border-left:4px solid var(--navy);padding-left:12px}.occ .date{font-size:12px;color:var(--muted)}
+nav{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);display:flex;justify-content:center;z-index:20}
+nav button{flex:1;max-width:240px;background:white;border-radius:0;padding:13px 8px;font-size:12px;color:var(--muted)}
+nav button.active{color:var(--navy);font-weight:700}
+dialog{border:0;border-radius:18px;padding:0;width:min(92%,560px);box-shadow:0 20px 60px #0005}dialog::backdrop{background:#0007}.modal{padding:18px}.modal h3{margin:0 0 12px}
+.small{font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>Registro de Ocorrências</h1><p id="subtitle">Turmas, alunos e ocorrências em um só lugar</p></header>
+<main>
+<section id="home"></section>
+<section id="classView" class="hidden"></section>
+<section id="studentView" class="hidden"></section>
+<section id="historyView" class="hidden"></section>
+</main>
+<nav>
+<button id="navHome" onclick="showHome()">🏫<br>Turmas</button>
+<button id="navHistory" onclick="showHistory()">📋<br>Histórico</button>
+</nav>
+
+<dialog id="dlg"></dialog>
+
+<script>
+const KEY="registro_ocorrencias_v1";
+const defaultTypes=["Dormiu durante a aula","Uso do celular","Conversando durante a aula","Atraso","Saiu da sala","Não realizou atividade","Desrespeito","Outro"];
+let db=JSON.parse(localStorage.getItem(KEY)||'{"classes":[],"types":[]}');
+if(!db.types.length) db.types=defaultTypes;
+let currentClass=null,currentStudent=null;
+const save=()=>localStorage.setItem(KEY,JSON.stringify(db));
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dateBR=d=>new Date(d).toLocaleDateString("pt-BR");
+function nav(which){document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.getElementById(which).classList.add("active")}
+function showOnly(id){["home","classView","studentView","historyView"].forEach(x=>document.getElementById(x).classList.toggle("hidden",x!==id))}
+function showHome(){currentClass=null;currentStudent=null;nav("navHome");showOnly("home");renderHome()}
+function renderHome(){
+let h=`<div class="row between"><div><h2>Minhas turmas</h2><div class="muted">${db.classes.length} turma(s) cadastrada(s)</div></div><button class="primary" onclick="addClass()">＋ Turma</button></div>`;
+h+=`<div class="list">`;
+if(!db.classes.length) h+=`<div class="card empty">Cadastre sua primeira turma para começar.</div>`;
+db.classes.forEach((c,i)=>h+=`<div class="item" onclick="openClass(${i})"><div class="item-main"><div class="item-title">${esc(c.name)}</div><div class="item-sub">${c.students.length} aluno(s)</div></div><div>›</div></div>`);
+h+=`</div>`;
+h+=`<div class="card" style="margin-top:16px"><div class="row between"><div><b>Tipos de ocorrência</b><div class="muted">Personalize as opções exibidas ao registrar.</div></div><button class="secondary" onclick="manageTypes()">Editar</button></div></div>`;
+document.getElementById("home").innerHTML=h;
+}
+function addClass(){
+openModal(`<h3>Nova turma</h3><div class="field"><label>Nome da turma</label><input id="mName" placeholder="Ex.: 1º Informática A"></div><div class="row" style="justify-content:flex-end"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveClass()">Salvar</button></div>`);
+setTimeout(()=>mName.focus(),50)
+}
+function saveClass(){let n=mName.value.trim();if(!n)return alert("Informe o nome da turma.");db.classes.push({name:n,students:[]});save();closeModal();renderHome()}
+function openClass(i){currentClass=i;showOnly("classView");renderClass()}
+function renderClass(){
+let c=db.classes[currentClass];
+let h=`<div class="row between"><div><button class="secondary" onclick="showHome()">← Voltar</button></div><button class="secondary" onclick="editClass()">Editar</button></div>
+<div class="card" style="margin-top:12px"><div class="row between"><div><h2>${esc(c.name)}</h2><div class="muted">${c.students.length} aluno(s)</div></div><button class="primary" onclick="addStudent()">＋ Aluno</button></div></div>`;
+h+=`<div class="list">`;
+if(!c.students.length)h+=`<div class="card empty">Nenhum aluno cadastrado.</div>`;
+c.students.forEach((s,i)=>{let count=s.occurrences.length;h+=`<div class="item"><div class="item-main" onclick="openStudent(${i})"><div class="item-title">${esc(s.name)}</div><div class="item-sub">${count} ocorrência(s)</div></div><div class="row"><button class="iconbtn" onclick="recordOccurrence(${i})">＋</button><button class="iconbtn" onclick="editStudent(${i})">✎</button></div></div>`});
+h+=`</div>`;document.getElementById("classView").innerHTML=h;
+}
+function editClass(){let c=db.classes[currentClass];openModal(`<h3>Editar turma</h3><div class="field"><label>Nome</label><input id="mName" value="${esc(c.name)}"></div><div class="row between"><button class="danger" onclick="deleteClass()">Excluir turma</button><div class="row"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="updateClass()">Salvar</button></div></div>`)}
+function updateClass(){let n=mName.value.trim();if(!n)return;db.classes[currentClass].name=n;save();closeModal();renderClass()}
+function deleteClass(){if(confirm("Excluir esta turma e todas as ocorrências dela?")){db.classes.splice(currentClass,1);save();closeModal();showHome()}}
+function addStudent(){openModal(`<h3>Novo aluno</h3><div class="field"><label>Nome completo</label><input id="mName" placeholder="Nome do aluno"></div><div class="row" style="justify-content:flex-end"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveStudent()">Salvar</button></div>`);setTimeout(()=>mName.focus(),50)}
+function saveStudent(){let n=mName.value.trim();if(!n)return alert("Informe o nome.");db.classes[currentClass].students.push({name:n,occurrences:[]});save();closeModal();renderClass()}
+function editStudent(i){let s=db.classes[currentClass].students[i];openModal(`<h3>Editar aluno</h3><div class="field"><label>Nome</label><input id="mName" value="${esc(s.name)}"></div><div class="row between"><button class="danger" onclick="deleteStudent(${i})">Excluir aluno</button><div class="row"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="updateStudent(${i})">Salvar</button></div></div>`)}
+function updateStudent(i){let n=mName.value.trim();if(!n)return;db.classes[currentClass].students[i].name=n;save();closeModal();renderClass()}
+function deleteStudent(i){if(confirm("Excluir este aluno e suas ocorrências?")){db.classes[currentClass].students.splice(i,1);save();closeModal();renderClass()}}
+function openStudent(i){currentStudent=i;showOnly("studentView");renderStudent()}
+function renderStudent(){
+let s=db.classes[currentClass].students[currentStudent];
+let h=`<div class="row"><button class="secondary" onclick="openClass(${currentClass})">← ${esc(db.classes[currentClass].name)}</button></div>
+<div class="card" style="margin-top:12px"><div class="row between"><div><h2>${esc(s.name)}</h2><div class="muted">${s.occurrences.length} ocorrência(s)</div></div><button class="primary" onclick="recordOccurrence(${currentStudent})">＋ Registrar</button></div></div>`;
+h+=`<div class="list">`;
+if(!s.occurrences.length)h+=`<div class="card empty">Nenhuma ocorrência registrada para este aluno.</div>`;
+[...s.occurrences].sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach((o,idx)=>h+=`<div class="card occ"><div class="row between"><b>${esc(o.type)}</b><button class="iconbtn" onclick="deleteOccurrence(${currentStudent},'${o.id}')">🗑</button></div><div class="date">${dateBR(o.date)}${o.time?" · "+esc(o.time):""}</div>${o.note?`<p class="small">${esc(o.note)}</p>`:""}</div>`);
+h+=`</div>`;document.getElementById("studentView").innerHTML=h;
+}
+function recordOccurrence(si){
+let s=db.classes[currentClass].students[si], now=new Date(), types=db.types;
+openModal(`<h3>Registrar ocorrência</h3>
+<div class="field"><label>Aluno</label><input value="${esc(s.name)}" disabled></div>
+<div class="field"><label>Ocorrência</label><select id="mType">${types.map(t=>`<option>${esc(t)}</option>`).join("")}</select></div>
+<div class="grid"><div class="field"><label>Data</label><input id="mDate" type="date" value="${now.toISOString().slice(0,10)}"></div><div class="field"><label>Hora</label><input id="mTime" type="time" value="${now.toTimeString().slice(0,5)}"></div></div>
+<div class="field"><label>Observação (opcional)</label><textarea id="mNote" placeholder="Detalhes da ocorrência..."></textarea></div>
+<div class="row" style="justify-content:flex-end"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveOccurrence(${si})">Registrar</button></div>`)
+}
+function saveOccurrence(si){
+let type=mType.value;if(!type)return;let s=db.classes[currentClass].students[si];
+s.occurrences.push({id:Date.now().toString(),type,date:mDate.value,time:mTime.value,note:mNote.value.trim()});save();closeModal();
+if(document.getElementById("studentView").classList.contains("hidden"))renderClass();else{currentStudent=si;renderStudent()}
+}
+function deleteOccurrence(si,id){if(confirm("Excluir esta ocorrência?")){let s=db.classes[currentClass].students[si];s.occurrences=s.occurrences.filter(o=>o.id!==id);save();renderStudent()}}
+function showHistory(){nav("navHistory");showOnly("historyView");renderHistory()}
+function renderHistory(){
+let all=[];db.classes.forEach((c,ci)=>c.students.forEach((s,si)=>s.occurrences.forEach(o=>all.push({...o,className:c.name,student:s.name})));
+all.sort((a,b)=>new Date(b.date+"T"+(b.time||"00:00"))-new Date(a.date+"T"+(a.time||"00:00")));
+let h=`<div class="row between"><div><h2>Histórico</h2><div class="muted">${all.length} ocorrência(s)</div></div></div>
+<div class="field"><input id="histSearch" placeholder="Pesquisar aluno, turma ou ocorrência..." oninput="filterHistory()"></div>
+<div id="histList" class="list"></div>`;document.getElementById("historyView").innerHTML=h;window._history=all;filterHistory()
+}
+function filterHistory(){let q=(document.getElementById("histSearch")?.value||"").toLowerCase();let a=(window._history||[]).filter(o=>[o.student,o.className,o.type,o.note].join(" ").toLowerCase().includes(q));let box=document.getElementById("histList");if(!box)return;box.innerHTML=a.length?a.map(o=>`<div class="card occ"><b>${esc(o.type)}</b><div class="date">${dateBR(o.date)}${o.time?" · "+esc(o.time):""} · ${esc(o.student)} · ${esc(o.className)}</div>${o.note?`<div class="small" style="margin-top:6px">${esc(o.note)}</div>`:""}</div>`).join(""):`<div class="card empty">Nenhuma ocorrência encontrada.</div>`}
+function manageTypes(){
+openModal(`<h3>Tipos de ocorrência</h3><div class="list" id="typeList">${db.types.map((t,i)=>`<div class="item"><span>${esc(t)}</span><button class="iconbtn" onclick="removeType(${i})">🗑</button></div>`).join("")}</div><div class="field"><input id="newType" placeholder="Novo tipo de ocorrência"></div><div class="row between"><button class="secondary" onclick="addType()">＋ Adicionar</button><button class="primary" onclick="closeModal()">Concluir</button></div>`)
+}
+function addType(){let v=newType.value.trim();if(!v)return;if(!db.types.includes(v))db.types.push(v);save();manageTypes()}
+function removeType(i){if(db.types.length<=1)return alert("Mantenha pelo menos um tipo.");db.types.splice(i,1);save();manageTypes()}
+function openModal(content){dlg.innerHTML=`<div class="modal">${content}</div>`;dlg.showModal()}
+function closeModal(){dlg.close()}
+showHome();
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body></html>
